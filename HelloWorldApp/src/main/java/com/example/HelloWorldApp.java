@@ -58,7 +58,7 @@ public class HelloWorldApp {
                         "    </div>" + 
                         "    <p><i>Reach Me from one of any above Platform</i></p>" +
                         "    <h2>This is my Java Application</h2>" + 
-                        "    <button>Click Me</button>" + 
+                        "    <button onclick=\"window.location.href='/image'\"> Click Me </button>" + 
                         "</body>" + 
                         "</html>";
             exchange.sendResponseHeaders(200, response.length());
