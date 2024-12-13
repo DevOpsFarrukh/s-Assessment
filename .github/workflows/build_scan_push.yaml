@@ -1,0 +1,291 @@
+name: DB - Build, Scan, and Deploy Docker Image
+
+on:
+  push:
+    branches:
+      - main   # Change to your target branch
+    paths-ignore:
+      - 'HelloWorldApp/nodeport.yaml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# permissions:
+#   contents: write  # Allows the workflow to modify repository contents
+
+jobs:
+  build-scan-and-push:
+    runs-on: ubuntu-latest  # Using GitHub-hosted runner
+    env:
+      MAVEN_VERSION: 3.9.6
+      DOCKER_IMAGE_NAME: java
+      DOCKER_TAG: latest
+      DOCKER_USERNAME: umair7865 #${{ secrets.DOCKER_USERNAME }}  # Use GitHub secrets for credentials
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      
+      
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # Doesn't save default credentials
+
+      # Step 2: Set up Maven environment
+      - name: Install Maven 3.9.6
+        run: |
+          #echo "Installing Maven $MAVEN_VERSION..."
+          #wget https://dlcdn.apache.org/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz -P ${{ runner.temp }}
+          #tar -xzf ${{ runner.temp }}/apache-maven-${MAVEN_VERSION}-bin.tar.gz -C ${{ runner.temp }}
+          #echo "MAVEN_HOME=${{ runner.temp }}/apache-maven-${MAVEN_VERSION }}" >> $GITHUB_ENV
+          #echo "PATH=${{ runner.temp }}/apache-maven-${MAVEN_VERSION }}/bin:$PATH" >> $GITHUB_ENV
+
+
+          # Download Maven
+          echo "Downloading Maven..."
+          wget https://dlcdn.apache.org/maven/maven-3/3.9.6/binaries/apache-maven-3.9.6-bin.tar.gz
+          
+          # Extract Maven
+          echo "Extracting Maven..."
+          sudo tar -xzf apache-maven-3.9.6-bin.tar.gz -C /opt/
+          
+          # Rename directory
+          echo "Setting up Maven directory..."
+          sudo mv /opt/apache-maven-3.9.6 /opt/maven
+          
+          # Set up environment variables
+          echo "Configuring environment variables..."
+          echo "MAVEN_HOME=/opt/maven" >> $GITHUB_ENV
+          echo "PATH=/opt/maven/bin:$PATH" >> $GITHUB_ENV
+          
+      - name: Set up Maven environment
+        run: |
+          echo "Setting up Maven environment..."
+          mvn -version
+      
+      # Step 3: Setup Trivy for Scanning
+      - name: Install Trivy
+        run: |
+          echo "Installing Trivy..."
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      # Step 4: Build with Maven
+      - name: Build with Maven
+        run: |
+          echo "Building the project..."
+          cd HelloWorldApp
+          mvn clean
+          mvn install
+
+      # Step 5 : Build Docker Image
+      - name: Build Docker image
+        run: |
+          echo "Building Docker image..."
+          cd HelloWorldApp
+          docker build -t $DOCKER_IMAGE_NAME:$DOCKER_TAG .
+
+      # Step 6 : Scan Docker Image
+      - name: Scan Docker image with Trivy
+        id: trivy_scan
+        run: |
+          echo "Scanning Docker image with Trivy..."
+          cd HelloWorldApp
+          trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --no-progress $DOCKER_IMAGE_NAME:$DOCKER_TAG > trivy_report.json
+
+          HIGH_COUNT=$(grep -o '"Severity": "HIGH"' trivy_report.json | wc -l)
+          CRITICAL_COUNT=$(grep -o '"Severity": "CRITICAL"' trivy_report.json | wc -l)
+
+          HIGH_COUNT=${HIGH_COUNT:-0}
+          CRITICAL_COUNT=${CRITICAL_COUNT:-0}
+
+          TOTAL_HIGH_CRITICAL=$((HIGH_COUNT + CRITICAL_COUNT))
+
+          echo "High vulnerabilities: $HIGH_COUNT"
+          echo "Critical vulnerabilities: $CRITICAL_COUNT"
+          echo "Total High + Critical vulnerabilities: $TOTAL_HIGH_CRITICAL"
+
+          echo "high_critical_count=$TOTAL_HIGH_CRITICAL" >> $GITHUB_ENV
+
+      
+      - name: Check vulnerability threshold
+        if: ${{ env.high_critical_count > 5 }}
+        run: |
+          echo "Vulnerability count exceeds threshold. Aborting push to Docker Hub."
+          exit 1
+
+      # Step 7 : Docker Login
+      - name: Docker Login
+        if: ${{ env.high_critical_count <= 5 }}
+        run: |
+          echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+
+      # Step 8 : Docker Image Push to Dockerhub
+      - name: Tag and push Docker image to DockerHub
+        if: ${{ env.high_critical_count <= 5 }}
+        run: |
+          echo "Tagging Docker image..."
+          docker tag $DOCKER_IMAGE_NAME:$DOCKER_TAG $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$DOCKER_TAG
+          echo "Pushing Docker image to DockerHub..."
+          docker push $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$DOCKER_TAG
+
+
+      # - name: Execute Command on Bastion Host
+      #   run: |
+      #     ssh -o StrictHostKeyChecking=no -i ${{ secrets.BASTION_PRIVATE_KEY }} ${{ secrets.BASTION_USER }}@${{ secrets.BASTION_HOST }} "bash /home/ubuntu/k8s.sh"
+
+
+      # - name: Update Kubernetes manifest with new image
+      #   if: ${{ env.high_critical_count <= 5 }}
+      #   run: |
+      #     echo "Updating Kubernetes manifest with the new image tag..."
+      #     sed -i 's|image: .*$|image: '"$DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$DOCKER_TAG"'|' HelloWorldApp/nodeport.yaml
+
+      # - name: Commit and push changes
+      #   if: ${{ env.high_critical_count <= 5 }}
+      #   uses: stefanzweifel/git-auto-commit-action@v4
+      #   with:
+      #     commit_message: 'Update image tag to $DOCKER_TAG'
+      #     file_pattern: HelloWorldApp/nodeport.yaml
+      #     branch: ${{ github.ref }}
+      #     commit_user_name: GitHub Actions
+      #     commit_user_email: actions@github.com
+
+
+
+
+
+#################################################################################################################
+#################################################################################################################
+
+
+# Below is for self hosted runner code which is tested and running !!!!!!!!!!!!!!!!!
+
+
+
+# name: Build, Scan, and Deploy Docker Image
+
+# on:
+#   push:
+#     branches:
+#       - main      # ENTER BRANCH NAME HERE
+#   # pull_request:
+#   #   branches:
+#   #     - feat/local
+#   #   paths:
+#   #     - '**/*.java'
+
+# jobs:
+#   build-scan-and-push:
+#     runs-on: self-hosted
+#     env:
+#       MAVEN_HOME: /opt/maven
+#       DOCKER_IMAGE_NAME: java
+#       DOCKER_TAG: latest
+#       DOCKER_USERNAME: umair7865 #${{ secrets.DOCKER_USERNAME }}
+#       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+#       # BUILD_ENV: production
+
+#     steps:
+#       # Step 1: Checkout code
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       # Step 2: Set up Maven environment
+#       - name: Set up Maven environment
+#         run: |
+#           echo "Setting up Maven environment..."
+#           ls -la /opt/maven
+#           /opt/maven/bin/mvn -version
+
+#       # Step 3: Build with Maven
+#       - name: Build with Maven
+#         run: |
+#           echo "Building the project..."
+#           /opt/maven/bin/mvn clean 
+#           /opt/maven/bin/mvn install
+
+#       # Step 4: Build Docker image
+#       - name: Build Docker image
+#         run: |
+#           echo "Building Docker image..."
+#           sudo docker build -t $DOCKER_IMAGE_NAME:$DOCKER_TAG .
+
+#       # Step 5: Scan Docker image with Trivy
+#       - name: Scan Docker image with Trivy
+#         id: trivy_scan
+#         run: |
+#           echo "Scanning Docker image with Trivy..."
+#           # Run Trivy scan and save the JSON output to a file
+#           sudo trivy image --exit-code 0 --severity CRITICAL,HIGH --format json --no-progress $DOCKER_IMAGE_NAME > trivy_report.json
+
+#           # Debugging: Print the trivy_report.json file to see what it contains
+#           #cat trivy_report.json
+
+#           # Extract High count using grep (Count occurrences of "Severity": "HIGH")
+#           HIGH_COUNT=$(grep -o '"Severity": "HIGH"' trivy_report.json | wc -l)
+
+#           # Extract Critical count using grep (Count occurrences of "Severity": "CRITICAL")
+#           CRITICAL_COUNT=$(grep -o '"Severity": "CRITICAL"' trivy_report.json | wc -l)
+
+#           # Handle cases where no values are found and set them to 0
+#           HIGH_COUNT=${HIGH_COUNT:-0}
+#           CRITICAL_COUNT=${CRITICAL_COUNT:-0}
+
+#           # Calculate total High + Critical vulnerabilities
+#           TOTAL_HIGH_CRITICAL=$((HIGH_COUNT + CRITICAL_COUNT))
+
+#           # Log the results to the console
+#           echo "High vulnerabilities: $HIGH_COUNT"
+#           echo "Critical vulnerabilities: $CRITICAL_COUNT"
+#           echo "Total High + Critical vulnerabilities: $TOTAL_HIGH_CRITICAL"
+
+#           # Pass the result to GitHub Actions output via environment variable
+#           echo "high_critical_count=$TOTAL_HIGH_CRITICAL" >> $GITHUB_ENV
+
+
+#       # Step 6: Check vulnerability threshold and stop if above threshold
+#       - name: Check vulnerability threshold
+#         if: ${{ env.high_critical_count > 75 }}
+#         run: |
+#           echo "Vulnerability count exceeds threshold. Aborting push to Docker Hub."
+#           exit 1
+
+#       # Step 7: Tag and push Docker image to DockerHub
+#       - name: Tag and push Docker image to DockerHub
+#         if: ${{ env.high_critical_count <= 75 }}
+#         run: |
+#           echo "Tagging Docker image..."
+#           sudo docker tag $DOCKER_IMAGE_NAME:$DOCKER_TAG $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$DOCKER_TAG
+#           echo "Pushing Docker image to DockerHub..."
+#           sudo docker push $DOCKER_USERNAME/$DOCKER_IMAGE_NAME:$DOCKER_TAG
+
+
+# ######################################################################################################
+
+
+#       # Step 8: Cache Trivy database for faster subsequent scans
+#       # - name: Cache Trivy database
+#       #   uses: actions/cache@v3
+#       #   with:
+#       #     path: ~/.cache/trivy
+#       #     key: ${{ runner.os }}-trivy-db
+#       #     restore-keys: |
+#       #       ${{ runner.os }}-trivy-db
+
+#       # Optional deployment and notification steps
+#       # Step 9: Conditional deployment step
+#       # - name: Deploy to production (if on production environment)
+#       #   if: env.BUILD_ENV == 'production' && steps.trivy_scan.outputs.high_critical_count <= 5
+#       #   run: |
+#       #     echo "Deploying to production..."
+#       #     # Deployment commands go here
+
+#       # Step 10: Send success notification
+#       # - name: Send success notification
+#       #   if: always()
+#       #   run: |
+#       #     echo "Build and deployment process completed."
