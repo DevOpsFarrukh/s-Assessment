@@ -1,0 +1,52 @@
+.
+├── farrukh-helm-chart
+│   ├── Chart.yaml
+│   ├── README.md
+│   ├── templates
+│   │   ├── deployment.yaml
+│   │   ├── _helpers.tpl
+│   │   ├── ingress.yaml
+│   │   └── service.yaml
+│   └── values.yaml
+├── farrukh-helm-chart-0.1.0.tgz
+├── HelloWorldApp
+│   ├── deployment.yaml
+│   ├── Dockerfile
+│   ├── nodeport.yaml
+│   ├── pom.xml
+│   └── src
+│       ├── main
+│       │   ├── java
+│       │   │   └── com
+│       │   │       └── example
+│       │   │           └── HelloWorldApp.java
+│       │   └── resources
+│       │       ├── application.properties
+│       │       └── static
+│       │           ├── farrukh.png
+│       │           └── umair.png
+│       └── test
+│           └── java
+│               └── com
+│                   └── example
+│                       └── AppTest.java
+├── main.tf
+├── modules
+│   ├── eks
+│   │   ├── main.tf
+│   │   ├── output.tf
+│   │   └── varaibles.tf
+│   └── vpc
+│       ├── main.tf
+│       ├── output.tf
+│       └── varaibles.tf
+├── output.tf
+├── provider.tf
+├── README.md
+├── systemassesment.tfvars
+├── terraform.tfstate
+├── terraform.tfstate.backup
+├── tree
+└── varaibles.tf
+
+17 directories, 32 files

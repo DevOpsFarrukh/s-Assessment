@@ -2,8 +2,10 @@
 
 A simple Java web application that responds with "Hello, World!" when accessed. This application is built using Maven and can be deployed on Kubernetes.
 
+
 This is an HLD of this application directory Structure
 ```
+
 .github/
 └── workflows
     └── main.yml

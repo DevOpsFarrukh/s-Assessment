@@ -1,0 +1,53 @@
+name: Deploy Application
+
+on:
+  workflow_dispatch: # Trigger the workflow manually
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1 # Update with your AWS region
+      CLUSTER_NAME: my-eks-cluster # Update with your EKS cluster name
+      DOCKER_IMAGE: farrukh/app # Replace with your Docker Hub repository
+
+    steps:
+      # Step 1: Checkout Code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 4: Setup Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.6 # Use the required Terraform version
+
+      # Step 5: Terraform Init and Apply
+      - name: Terraform Init and Apply
+        env:
+          TF_VAR_docker_image: $DOCKER_IMAGE:latest # Pass the Docker image as a variable to Terraform
+        run: |
+          echo "Initializing Terraform..."
+          terraform init
+          echo "Applying Terraform configuration..."
+          terraform apply --var-file=systemassesment.tfvars
+
+      # Step 6: Configure kubectl for EKS
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: $AWS_REGION
+
+      - name: Update kubeconfig for EKS
+        run: |
+          echo "Updating kubeconfig for EKS..."
+          aws eks update-kubeconfig --region $AWS_REGION --name $CLUSTER_NAME
+
+      # Step 7: Deploy Helm Chart
+      - name: Deploy Helm Chart
+        run: |
+          echo "Deploying Helm chart to EKS..."
+          helm install farrukh-app ./farrukh-helm-chart --namespace farrukh-namespace --create-namespace
