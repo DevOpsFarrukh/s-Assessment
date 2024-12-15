@@ -20,9 +20,7 @@ jobs:
       DOCKER_IMAGE_NAME: java
       DOCKER_TAG: latest
       DOCKER_USERNAME: farrukhdock #${{ secrets.DOCKER_USERNAME }}  # Use GitHub secrets for credentials
-      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      
-      
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}      
     steps:
       # Step 1: Checkout code
       - name: Checkout code
