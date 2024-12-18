@@ -1,20 +1,12 @@
-variable "vpc_cidr_block" {
-  description = "CIDR block for the VPC"
+variable "description" {
+  description = "A description for the security group"
+  default     = "Security group created by Terraform"
+  type        = string
 }
 
-variable "public_subnet_cidr_blocks" {
-  description = "CIDR blocks for public subnets"
-  type        = list(string)
-}
-
-variable "private_subnet_cidr_blocks" {
-  description = "CIDR blocks for private subnets"
-  type        = list(string)
-}
-
-variable "availability_zones" {
-  description = "Availability zones for subnets"
-  type        = list(string)
+variable "vpc_id" {
+  description = "The ID of the VPC where the security group is being deployed"
+  type        = string
 }
 
 variable "ingress_rule_list" {
@@ -28,7 +20,6 @@ variable "ingress_rule_list" {
     protocol                 = string
     to_port                  = number
   }))
-
 }
 
 variable "egress_rule_list" {
@@ -59,32 +50,7 @@ variable "tags" {
   type        = map(any)
 }
 
-variable "aws_region" {
-  description = "Tags to be applied to the resource"
-}
-
 
 variable "environment_name" {
   description = "Tags to be applied to the resource"
-}
-
-variable "cluster_version" {
-  description = "Kubernetes version for the EKS cluster"
-  type        = string
-}
-
-
-variable "node_groups" {
-  description = "Configuration for EKS node groups"
-  type = map(object({
-
-
-    
-    desired_capacity = number
-    max_capacity     = number
-    min_capacity     = number
-    instance_type    = string
-    subnet_id        = string
-    disk_size        = number
-  }))
 }

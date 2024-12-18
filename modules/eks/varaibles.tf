@@ -33,12 +33,11 @@ variable "node_groups" {
   type = map(object({
 
 
-
+    
     desired_capacity = number
     max_capacity     = number
     min_capacity     = number
     instance_type    = string
-    subnet_id        = string
     disk_size        = number
   }))
 }
